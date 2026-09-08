@@ -81,6 +81,8 @@ def run_migrations_online() -> None:
         connection.execute(text("CREATE SCHEMA IF NOT EXISTS bronze;"))
         connection.execute(text("CREATE SCHEMA IF NOT EXISTS silver;"))
         connection.execute(text("CREATE SCHEMA IF NOT EXISTS gold;"))
+        # Older migrations use unqualified master-table references.
+        connection.execute(text("SET search_path TO master, public;"))
         connection.commit()
 
         context.configure(
