@@ -24,6 +24,7 @@ from app.pump.models import Pump
 from app.rul.models import RulEstimate
 from app.station.models import Station
 from app.tenant.models import Tenant
+from app.user.models import User  # register master.user before ORM flush ordering
 from app.work_order.models import WorkOrder, WorkOrderSource, WorkOrderStatus
 
 VERSION = "uat-synthetic-v1"
