@@ -69,6 +69,13 @@ class Settings(BaseSettings):
     # ETL (app/etl/)
     weather_api_base_url: str = "https://api.open-meteo.com/v1"
     simulator_interval_seconds: int = 5
+    data_mode: str = "demo_snapshot"
+    telemetry_freshness_seconds: int = 900
+
+    @property
+    def smtp_from_email(self) -> str:
+        """Backward-compatible name used by the operations email actions."""
+        return self.smtp_from
 
     @field_validator("cors_allow_origins", mode="before")
     @classmethod
