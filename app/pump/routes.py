@@ -1,10 +1,13 @@
 """Pump routes. Thin: translate HTTP <-> services, no business logic."""
+
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.core.auth import require_permission
 from app.core.db import get_db
+from app.core.permissions import Permission
 from app.core.tenancy import get_current_tenant_id
 from app.pump import services
 from app.pump.models import PumpStatus
@@ -18,6 +21,7 @@ def create_pump(
     payload: PumpCreate,
     db: Session = Depends(get_db),
     tenant_id: uuid.UUID = Depends(get_current_tenant_id),
+    _=Depends(require_permission(Permission.MANAGE_ASSETS)),
 ) -> PumpRead:
     return services.create_pump(db, tenant_id, payload)
 
@@ -50,6 +54,7 @@ def update_pump(
     payload: PumpUpdate,
     db: Session = Depends(get_db),
     tenant_id: uuid.UUID = Depends(get_current_tenant_id),
+    _=Depends(require_permission(Permission.MANAGE_ASSETS)),
 ) -> PumpRead:
     pump = services.update_pump(db, tenant_id, pump_id, payload)
     if pump is None:

@@ -1,10 +1,13 @@
 """Maintenance schedule routes. Thin: translate HTTP <-> services."""
+
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.core.auth import require_permission
 from app.core.db import get_db
+from app.core.permissions import Permission
 from app.core.tenancy import get_current_tenant_id
 from app.maintenance_schedule import services
 from app.maintenance_schedule.models import ScheduleStatus
@@ -22,6 +25,7 @@ def create_scheduled_maintenance(
     payload: ScheduledMaintenanceCreate,
     db: Session = Depends(get_db),
     tenant_id: uuid.UUID = Depends(get_current_tenant_id),
+    _=Depends(require_permission(Permission.MANAGE_SCHEDULE)),
 ) -> ScheduledMaintenanceRead:
     return services.create_scheduled_maintenance(db, tenant_id, payload)
 
@@ -58,6 +62,7 @@ def update_scheduled_maintenance(
     payload: ScheduledMaintenanceUpdate,
     db: Session = Depends(get_db),
     tenant_id: uuid.UUID = Depends(get_current_tenant_id),
+    _=Depends(require_permission(Permission.MANAGE_SCHEDULE)),
 ) -> ScheduledMaintenanceRead:
     entry = services.update_scheduled_maintenance(db, tenant_id, entry_id, payload)
     if entry is None:

@@ -1,11 +1,13 @@
 """Model metrics routes. Thin: translate HTTP <-> services."""
+
 import uuid
 
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
-from app.core.auth import require_role
+from app.core.auth import require_permission
 from app.core.db import get_db
+from app.core.permissions import Permission
 from app.core.tenancy import get_current_tenant_id
 from app.model_metrics import services
 from app.model_metrics.schemas import ModelMetricCreate, ModelMetricRead
@@ -18,7 +20,7 @@ def record_metric(
     payload: ModelMetricCreate,
     db: Session = Depends(get_db),
     tenant_id: uuid.UUID = Depends(get_current_tenant_id),
-    _=Depends(require_role("admin")),
+    _=Depends(require_permission(Permission.MANAGE_MODELS)),
 ) -> ModelMetricRead:
     return services.record_metric(db, tenant_id, payload)
 

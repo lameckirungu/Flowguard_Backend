@@ -4,6 +4,7 @@ Imports the same `settings` and `Base` the app uses (app/core/config.py,
 app/core/base.py) — never a second hardcoded connection string, and
 autogenerate diffs against the exact same metadata the app runs on.
 """
+
 from logging.config import fileConfig
 
 from alembic import context
@@ -14,6 +15,9 @@ from sqlalchemy import engine_from_config, pool, text
 # Import every module's models so they register on Base.metadata before
 # autogenerate runs. Add a line here whenever a new module gets models.py.
 import app.alert.models  # noqa: F401,E402
+import app.incidents.models  # noqa: F401,E402
+import app.audit.models  # noqa: F401,E402
+import app.auth_session.models  # noqa: F401,E402
 import app.etl.bronze.models  # noqa: F401,E402
 import app.etl.gold.models  # noqa: F401,E402
 import app.etl.silver.models  # noqa: F401,E402

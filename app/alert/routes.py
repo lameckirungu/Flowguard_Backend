@@ -1,4 +1,5 @@
 """Alert routes. Thin: translate HTTP <-> services, no business logic."""
+
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -7,7 +8,9 @@ from sqlalchemy.orm import Session
 from app.alert import services
 from app.alert.models import AlertStatus
 from app.alert.schemas import AlertCreate, AlertRead, AlertUpdate
+from app.core.auth import CurrentUser, require_permission
 from app.core.db import get_db
+from app.core.permissions import Permission
 from app.core.tenancy import get_current_tenant_id
 
 router = APIRouter(prefix="/api/v1/alerts", tags=["alerts"])
@@ -18,6 +21,7 @@ def create_alert(
     payload: AlertCreate,
     db: Session = Depends(get_db),
     tenant_id: uuid.UUID = Depends(get_current_tenant_id),
+    _=Depends(require_permission(Permission.MANAGE_ALERTS)),
 ) -> AlertRead:
     return services.create_alert(db, tenant_id, payload)
 
@@ -50,8 +54,11 @@ def update_alert(
     payload: AlertUpdate,
     db: Session = Depends(get_db),
     tenant_id: uuid.UUID = Depends(get_current_tenant_id),
+    current_user: CurrentUser = Depends(require_permission(Permission.MANAGE_ALERTS)),
 ) -> AlertRead:
-    alert = services.update_alert(db, tenant_id, alert_id, payload)
+    alert = services.update_alert(
+        db, tenant_id, alert_id, payload, actor_user_id=current_user.id
+    )
     if alert is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Alert not found")
     return alert

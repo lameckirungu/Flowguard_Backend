@@ -1,10 +1,13 @@
 """Station routes. Thin: translate HTTP <-> services, no business logic."""
+
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.core.auth import require_permission
 from app.core.db import get_db
+from app.core.permissions import Permission
 from app.core.tenancy import get_current_tenant_id
 from app.station import services
 from app.station.schemas import StationCreate, StationRead, StationUpdate
@@ -17,6 +20,7 @@ def create_station(
     payload: StationCreate,
     db: Session = Depends(get_db),
     tenant_id: uuid.UUID = Depends(get_current_tenant_id),
+    _=Depends(require_permission(Permission.MANAGE_ASSETS)),
 ) -> StationRead:
     return services.create_station(db, tenant_id, payload)
 
@@ -47,6 +51,7 @@ def update_station(
     payload: StationUpdate,
     db: Session = Depends(get_db),
     tenant_id: uuid.UUID = Depends(get_current_tenant_id),
+    _=Depends(require_permission(Permission.MANAGE_ASSETS)),
 ) -> StationRead:
     station = services.update_station(db, tenant_id, station_id, payload)
     if station is None:

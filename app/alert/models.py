@@ -44,6 +44,10 @@ class Alert(Base, UUIDPrimaryKeyMixin, TenantScopedMixin, TimestampMixin):
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     source: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    assigned_to_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("user.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    resolution_note: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"<Alert id={self.id} severity={self.severity} status={self.status}>"
