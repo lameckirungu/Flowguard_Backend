@@ -43,7 +43,12 @@ if config.config_file_name is not None:
 target_metadata = Base.metadata
 
 # FIX: Escaping the '%' sign in the database password so Alembic doesn't crash
-safe_db_url = str(settings.database_url).replace("%", "%%")
+db_url = str(settings.database_url)
+if db_url.startswith("postgresql://"):
+    db_url = db_url.replace("postgresql://", "postgresql+psycopg://", 1)
+elif db_url.startswith("postgres://"):
+    db_url = db_url.replace("postgres://", "postgresql+psycopg://", 1)
+safe_db_url = db_url.replace("%", "%%")
 config.set_main_option("sqlalchemy.url", safe_db_url)
 
 
