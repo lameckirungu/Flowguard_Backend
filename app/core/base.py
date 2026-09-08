@@ -1,14 +1,7 @@
-"""Declarative base + shared mixins for every SQLAlchemy model in the app.
-
-Every module's models.py imports `Base` from here to register on the same
-metadata (this is what Alembic autogenerate diffs against), and every
-tenant-scoped table inherits `TenantScopedMixin` — no exceptions. See the
-"Multi-tenancy" section of the top-level README for the rule this enforces.
-"""
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Uuid, func
+from sqlalchemy import DateTime, ForeignKey, MetaData, Uuid, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, declared_attr, mapped_column
 
 
@@ -16,6 +9,9 @@ class Base(DeclarativeBase):
     """Shared metadata for all ORM models. Import this, never create a
     second `DeclarativeBase` in a module.
     """
+    # FIX: Define the default schema here. This instantly moves all untouched 
+    # tables (alert, user, work_order, etc.) into the master schema safely!
+    metadata = MetaData(schema="master")
 
 
 class UUIDPrimaryKeyMixin:
@@ -57,7 +53,7 @@ class TenantScopedMixin:
     def tenant_id(cls) -> Mapped[uuid.UUID]:
         return mapped_column(
             Uuid(as_uuid=True),
-            ForeignKey("tenant.id", ondelete="CASCADE"),
+            ForeignKey("master.tenant.id", ondelete="CASCADE"),
             nullable=False,
             index=True,
         )

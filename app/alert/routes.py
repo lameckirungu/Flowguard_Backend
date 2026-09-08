@@ -55,3 +55,15 @@ def update_alert(
     if alert is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Alert not found")
     return alert
+
+
+@router.post("/pumps/{pump_id}/evaluate", response_model=list[AlertRead])
+def evaluate_alert_thresholds(
+    pump_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    tenant_id: uuid.UUID = Depends(get_current_tenant_id),
+) -> list[AlertRead]:
+    try:
+        return services.evaluate_thresholds(db, tenant_id, pump_id)
+    except ValueError as err:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(err)) from err

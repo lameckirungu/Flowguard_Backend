@@ -26,10 +26,14 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/users/login", auto_error=
 class CurrentUser:
     """The decoded identity attached to a request. `tenant_id` is what
     app/core/tenancy.py hands to every service call.
+
+    `tenant_id` is None for the platform admin, who is not scoped to any
+    tenant — see app/user/models.py. Tenant-scoped routes depend on
+    app/core/tenancy.get_current_tenant_id, which rejects that case.
     """
 
     id: uuid.UUID
-    tenant_id: uuid.UUID
+    tenant_id: uuid.UUID | None
     email: str
     role: str
 
@@ -53,7 +57,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 def create_access_token(
     *,
     user_id: uuid.UUID,
-    tenant_id: uuid.UUID,
+    tenant_id: uuid.UUID | None,
     email: str,
     role: str,
     expires_delta: timedelta | None = None,
@@ -63,19 +67,30 @@ def create_access_token(
     )
     payload = {
         "sub": str(user_id),
-        "tenant_id": str(tenant_id),
         "email": email,
         "role": role,
+        "type": "access",
         "exp": expire,
     }
+    # Omitted entirely for the platform admin, who has no tenant.
+    if tenant_id is not None:
+        payload["tenant_id"] = str(tenant_id)
     return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
 
 
-def decode_access_token(token: str) -> CurrentUser:
+def create_reset_token(user_id: uuid.UUID) -> str:
+    """One-shot token handed out at login when the user still has a first-time
+    password to change. Accepted only by `decode_reset_token` (the
+    reset-password route) — its `type` claim keeps it from being replayed as
+    an access token."""
+    expire = datetime.now(UTC) + timedelta(minutes=settings.jwt_reset_token_expire_minutes)
+    payload = {"sub": str(user_id), "type": "reset", "exp": expire}
+    return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
+
+
+def _decode(token: str) -> dict:
     try:
-        payload = jwt.decode(
-            token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm]
-        )
+        return jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
     except jwt.PyJWTError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -83,10 +98,20 @@ def decode_access_token(token: str) -> CurrentUser:
             headers={"WWW-Authenticate": "Bearer"},
         ) from exc
 
+
+def decode_access_token(token: str) -> CurrentUser:
+    payload = _decode(token)
+    if payload.get("type") == "reset":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Password reset required; use the reset-password endpoint",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     try:
+        tenant_id_raw = payload.get("tenant_id")
         return CurrentUser(
             id=uuid.UUID(payload["sub"]),
-            tenant_id=uuid.UUID(payload["tenant_id"]),
+            tenant_id=uuid.UUID(tenant_id_raw) if tenant_id_raw else None,
             email=payload["email"],
             role=payload["role"],
         )
@@ -95,6 +120,24 @@ def decode_access_token(token: str) -> CurrentUser:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Malformed token payload",
             headers={"WWW-Authenticate": "Bearer"},
+        ) from exc
+
+
+def decode_reset_token(token: str) -> uuid.UUID:
+    """Returns the user id embedded in a reset token, or 401 if the token is
+    invalid, expired, or not a reset token."""
+    payload = _decode(token)
+    if payload.get("type") != "reset":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not a password-reset token",
+        )
+    try:
+        return uuid.UUID(payload["sub"])
+    except (KeyError, ValueError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Malformed token payload",
         ) from exc
 
 

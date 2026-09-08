@@ -20,9 +20,11 @@ class PumpStatus(enum.StrEnum):
 
 class Pump(Base, UUIDPrimaryKeyMixin, TenantScopedMixin, TimestampMixin):
     __tablename__ = "pump"
+    __table_args__ = {'schema': 'master'}
 
     station_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("station.id", ondelete="CASCADE"), nullable=False, index=True
+        # FIX: Point the Foreign Key specifically to the 'master' schema
+        ForeignKey("master.station.id", ondelete="CASCADE"), nullable=False, index=True
     )
 
     tag_number: Mapped[str] = mapped_column(String(50), nullable=False, index=True)

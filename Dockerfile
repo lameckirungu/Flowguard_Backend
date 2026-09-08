@@ -1,29 +1,24 @@
-# Multi-stage build: resolve/install deps with uv in a builder stage, then
-# copy only the resulting .venv + source into a slim runtime image.
-
+# Multi-stage Docker build for Flowguard Backend
 FROM python:3.13-slim AS builder
-
-RUN pip install --no-cache-dir uv
 
 WORKDIR /app
 
-# Install deps first (separate layer from the source copy below) so code
-# changes don't invalidate the dependency-install cache layer.
-COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-dev --no-install-project
+# Copy requirement files first for optimal Docker layer caching
+COPY pyproject.toml requirements.txt ./
+RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 
-COPY . .
-RUN uv sync --frozen --no-dev
-
+COPY . /app
 
 FROM python:3.13-slim AS runtime
 
 RUN useradd --create-home --uid 1000 flowgard
 WORKDIR /app
 
+# Copy installed site-packages and app source
+COPY --from=builder /install /usr/local
 COPY --from=builder --chown=flowgard:flowgard /app /app
-ENV PATH="/app/.venv/bin:${PATH}" \
-    PYTHONDONTWRITEBYTECODE=1 \
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
 USER flowgard

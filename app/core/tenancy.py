@@ -11,7 +11,7 @@ bypassing this dependency.
 import uuid
 from dataclasses import dataclass
 
-from fastapi import Depends
+from fastapi import Depends, HTTPException, status
 
 from app.core.auth import CurrentUser, get_current_user
 
@@ -22,7 +22,16 @@ def get_current_tenant_id(
     """The tenant_id to filter every query by. Import this in routes.py,
     not `get_current_user` directly, when a route only cares about tenant
     scope and not the rest of the identity.
+
+    The platform admin has no tenant, so any route depending on this is
+    off-limits to them — they act only through the platform-scoped tenant
+    management routes (see app/tenant/routes.py).
     """
+    if current_user.tenant_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This endpoint is tenant-scoped and not available to the platform admin",
+        )
     return current_user.tenant_id
 
 
@@ -40,4 +49,9 @@ class TenantContext:
 def get_current_tenant_context(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> TenantContext:
+    if current_user.tenant_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This endpoint is tenant-scoped and not available to the platform admin",
+        )
     return TenantContext(tenant_id=current_user.tenant_id, user=current_user)

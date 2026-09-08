@@ -12,6 +12,7 @@ from app.core.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 
 class Tenant(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     __tablename__ = "tenant"
+    __table_args__ = {'schema': 'master'}
 
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     slug: Mapped[str] = mapped_column(String(80), unique=True, nullable=False, index=True)

@@ -9,6 +9,7 @@ from app.core.base import Base, TenantScopedMixin, TimestampMixin, UUIDPrimaryKe
 
 class Station(Base, UUIDPrimaryKeyMixin, TenantScopedMixin, TimestampMixin):
     __tablename__ = "station"
+    __table_args__ = {'schema': 'master'}
 
     code: Mapped[str] = mapped_column(String(20), nullable=False, index=True)  # e.g. "PS1"
     name: Mapped[str] = mapped_column(String(200), nullable=False)

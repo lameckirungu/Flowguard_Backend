@@ -1,7 +1,7 @@
 """Pydantic v2 request/response models for the tenant module."""
 import uuid
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, EmailStr
 
 
 class TenantBase(BaseModel):
@@ -16,7 +16,11 @@ class TenantBase(BaseModel):
 
 
 class TenantCreate(TenantBase):
-    pass
+    """Platform-admin onboarding of a new tenant. Also seeds that tenant's
+    first ADMIN user, who is emailed a first-time password."""
+
+    admin_email: EmailStr
+    admin_full_name: str
 
 
 class TenantUpdate(BaseModel):
@@ -35,3 +39,11 @@ class TenantRead(TenantBase):
 
     id: uuid.UUID
     is_active: bool
+
+
+class TenantOnboardRead(TenantRead):
+    """Returned from tenant onboarding: the tenant plus the id of the ADMIN
+    user that was created and emailed an invite."""
+
+    admin_user_id: uuid.UUID
+    admin_email: EmailStr

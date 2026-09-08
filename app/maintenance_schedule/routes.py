@@ -65,3 +65,11 @@ def update_scheduled_maintenance(
             status_code=status.HTTP_404_NOT_FOUND, detail="Schedule entry not found"
         )
     return entry
+
+
+@router.post("/rank", response_model=list[ScheduledMaintenanceRead])
+def rank_schedule_by_rul(
+    db: Session = Depends(get_db),
+    tenant_id: uuid.UUID = Depends(get_current_tenant_id),
+) -> list[ScheduledMaintenanceRead]:
+    return services.rank_schedule_by_rul(db, tenant_id)

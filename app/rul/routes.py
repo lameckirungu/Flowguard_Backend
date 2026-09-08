@@ -31,3 +31,15 @@ def get_latest_rul_estimate(
     if result is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No RUL estimate found")
     return result
+
+
+@router.post("/pumps/{pump_id}/trigger", response_model=RulEstimateRead, status_code=status.HTTP_201_CREATED)
+def trigger_rul_estimate(
+    pump_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    tenant_id: uuid.UUID = Depends(get_current_tenant_id),
+) -> RulEstimateRead:
+    try:
+        return services.run_rul_estimate(db, tenant_id, pump_id)
+    except ValueError as err:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(err)) from err

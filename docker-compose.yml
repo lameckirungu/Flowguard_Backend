@@ -10,19 +10,17 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_USER: flowgard
-      POSTGRES_PASSWORD: flowgard
-      POSTGRES_DB: flowgard
+      POSTGRES_USER: ${POSTGRES_USER:-flowgard}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-flowgard}
+      POSTGRES_DB: ${POSTGRES_DB:-flowgard}
     volumes:
       - flowgard_pgdata:/var/lib/postgresql/data
     ports:
-      # Host 5433 -> container 5432: avoids clashing with a Postgres already
-      # running natively on the host's 5432. `api`/`migrate` talk to `db` on
-      # the compose network directly and don't use this mapping at all;
-      # it's only for connecting a host-side psql/GUI client.
-      - "5433:5432"
+      # Host port 5434 -> container 5432: avoids clashing with host Postgres services.
+      # `api`/`migrate` talk to `db` on the internal compose network (db:5432).
+      - "${POSTGRES_HOST_PORT:-5434}:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U flowgard -d flowgard"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-flowgard} -d ${POSTGRES_DB:-flowgard}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -31,10 +29,10 @@ services:
     build: .
     command: ["alembic", "upgrade", "head"]
     environment: &app_env
-      DATABASE_URL: postgresql+psycopg://flowgard:flowgard@db:5432/flowgard
-      TEST_DATABASE_URL: postgresql+psycopg://flowgard:flowgard@db:5432/flowgard_test
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-flowgard}:${POSTGRES_PASSWORD:-flowgard}@db:5432/${POSTGRES_DB:-flowgard}
+      TEST_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-flowgard}:${POSTGRES_PASSWORD:-flowgard}@db:5432/${POSTGRES_DB:-flowgard}_test
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:-dev-secret-change-me}
-      CORS_ALLOW_ORIGINS: http://localhost:3000
+      CORS_ALLOW_ORIGINS: http://localhost:3000,http://localhost:8501
     depends_on:
       db:
         condition: service_healthy
@@ -51,9 +49,22 @@ services:
       migrate:
         condition: service_completed_successfully
 
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile.dashboard
+    restart: unless-stopped
+    ports:
+      - "8501:8501"
+    environment:
+      API_BASE_URL: http://api:8000
+    depends_on:
+      api:
+        condition: service_started
+
   seed:
     build: .
-    command: ["python", "scripts/seed_kpc_tenant.py"]
+    command: ["sh", "-c", "python scripts/seed_platform_admin.py && python scripts/seed_kpc_tenant.py"]
     environment: *app_env
     depends_on:
       db:

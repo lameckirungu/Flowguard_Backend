@@ -8,7 +8,8 @@ from datetime import UTC, datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.etl.gold.models import PumpFeatureWindow
+# FIX: Import the correct Medallion Gold model
+from app.etl.gold.models import GoldPumpFeatures
 from app.explainability.models import FeatureAttribution
 from app.flowgard_engine.services import get_latest_health_deviation
 from app.pump.models import Pump
@@ -22,28 +23,18 @@ def compute_feature_attribution(
     if pump is None:
         raise ValueError(f"Pump {pump_id} not found for tenant {tenant_id}")
 
+    # FIX: Query GoldPumpFeatures and order by timestamp
     gold_window = db.scalar(
-        select(PumpFeatureWindow)
-        .where(PumpFeatureWindow.tenant_id == tenant_id, PumpFeatureWindow.pump_id == pump_id)
-        .order_by(PumpFeatureWindow.window_end.desc())
+        select(GoldPumpFeatures)
+        .where(GoldPumpFeatures.tenant_id == tenant_id, GoldPumpFeatures.pump_id == pump_id)
+        .order_by(GoldPumpFeatures.timestamp.desc())
         .limit(1)
     )
 
-    vibration = (
-        float(gold_window.vibration_mean)
-        if gold_window and gold_window.vibration_mean
-        else 1.5
-    )
-    temp = (
-        float(gold_window.temperature_mean)
-        if gold_window and gold_window.temperature_mean
-        else 45.0
-    )
-    motor_curr = (
-        float(gold_window.motor_current_mean)
-        if gold_window and gold_window.motor_current_mean
-        else 35.0
-    )
+    # Safely extract values in case the column names changed in the Medallion refactor
+    vibration = float(getattr(gold_window, "vibration_axial_rolling_avg", getattr(gold_window, "vibration_mean", 1.5))) if gold_window else 1.5
+    temp = float(getattr(gold_window, "temperature_bearing_rolling_avg", getattr(gold_window, "temperature_mean", 45.0))) if gold_window else 45.0
+    motor_curr = float(getattr(gold_window, "motor_current_rolling_avg", getattr(gold_window, "motor_current_mean", 35.0))) if gold_window else 35.0
 
     hdi_rec = get_latest_health_deviation(db, tenant_id, pump_id)
     hdi = (

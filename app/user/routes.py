@@ -1,24 +1,39 @@
-"""User routes, including login. Thin: translate HTTP <-> services."""
+"""User routes: login, first-login password reset, and tenant-scoped user
+onboarding/management. Thin: translate HTTP <-> services."""
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
-from app.core.auth import create_access_token, require_role
+from app.core.auth import create_access_token, create_reset_token, decode_reset_token, require_role
 from app.core.db import get_db
+from app.core.email import EmailNotConfiguredError
 from app.core.tenancy import get_current_tenant_id
 from app.user import services
-from app.user.schemas import TokenResponse, UserCreate, UserRead, UserUpdate
+from app.user.schemas import (
+    LoginResponse,
+    ResetPasswordRequest,
+    TokenResponse,
+    UserCreate,
+    UserRead,
+    UserUpdate,
+)
 
 router = APIRouter(prefix="/api/v1/users", tags=["users"])
 
 
-@router.post("/login", response_model=TokenResponse)
+def _access_token_for(user) -> str:
+    return create_access_token(
+        user_id=user.id, tenant_id=user.tenant_id, email=user.email, role=user.role.value
+    )
+
+
+@router.post("/login", response_model=LoginResponse)
 def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db),
-) -> TokenResponse:
+) -> LoginResponse:
     user = services.authenticate_user(db, form_data.username, form_data.password)
     if user is None:
         raise HTTPException(
@@ -26,10 +41,19 @@ def login(
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    token = create_access_token(
-        user_id=user.id, tenant_id=user.tenant_id, email=user.email, role=user.role.value
-    )
-    return TokenResponse(access_token=token)
+    if user.must_reset_password:
+        # No access token until the first-time password is changed.
+        return LoginResponse(reset_required=True, reset_token=create_reset_token(user.id))
+    return LoginResponse(access_token=_access_token_for(user))
+
+
+@router.post("/reset-password", response_model=TokenResponse)
+def reset_password(payload: ResetPasswordRequest, db: Session = Depends(get_db)) -> TokenResponse:
+    user_id = decode_reset_token(payload.reset_token)
+    user = services.reset_password(db, user_id, payload.new_password)
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    return TokenResponse(access_token=_access_token_for(user))
 
 
 @router.post("", response_model=UserRead, status_code=status.HTTP_201_CREATED)
@@ -39,7 +63,13 @@ def create_user(
     tenant_id: uuid.UUID = Depends(get_current_tenant_id),
     _=Depends(require_role("admin")),
 ) -> UserRead:
-    return services.create_user(db, tenant_id, payload)
+    try:
+        return services.onboard_user(db, tenant_id, payload)
+    except EmailNotConfiguredError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="User created but the invite email could not be sent: SMTP is not configured",
+        ) from exc
 
 
 @router.get("", response_model=list[UserRead])

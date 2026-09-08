@@ -47,6 +47,76 @@ def test_service_enforces_tenant_scope(db_session: Session, station_a, station_b
     assert services.list_scheduled_maintenance(db_session, station_b.tenant_id) == []
 
 
-def test_rank_schedule_by_rul_not_implemented(db_session: Session, tenant_a):
-    with pytest.raises(NotImplementedError):
-        services.rank_schedule_by_rul(db_session, tenant_a.id)
+def test_rank_schedule_by_rul_success(db_session: Session, station_a):
+    pump = Pump(
+        tenant_id=station_a.tenant_id,
+        station_id=station_a.id,
+        tag_number="PS1-P02",
+        status=PumpStatus.OPERATIONAL,
+    )
+    db_session.add(pump)
+    db_session.commit()
+
+    services.create_scheduled_maintenance(
+        db_session,
+        station_a.tenant_id,
+        ScheduledMaintenanceCreate(
+            pump_id=pump.id,
+            station_id=station_a.id,
+            scheduled_date=date.today() + timedelta(days=7),
+        ),
+    )
+
+    ranked = services.rank_schedule_by_rul(db_session, station_a.tenant_id)
+    assert len(ranked) >= 1
+    assert ranked[0].priority_rank == 1
+
+
+def test_maintenance_schedule_routes_crud(client, headers_a, station_a, db_session):
+    pump = Pump(
+        tenant_id=station_a.tenant_id,
+        station_id=station_a.id,
+        tag_number="PS1-P03",
+        status=PumpStatus.OPERATIONAL,
+    )
+    db_session.add(pump)
+    db_session.commit()
+
+    # Create schedule via HTTP
+    res = client.post(
+        "/api/v1/maintenance-schedule",
+        json={
+            "pump_id": str(pump.id),
+            "station_id": str(station_a.id),
+            "scheduled_date": (date.today() + timedelta(days=10)).isoformat(),
+        },
+        headers=headers_a,
+    )
+    assert res.status_code == 201
+    entry_id = res.json()["id"]
+
+    # List schedules via HTTP
+    res = client.get("/api/v1/maintenance-schedule", headers=headers_a)
+    assert res.status_code == 200
+    assert len(res.json()) >= 1
+
+    # Get single schedule via HTTP
+    res = client.get(f"/api/v1/maintenance-schedule/{entry_id}", headers=headers_a)
+    assert res.status_code == 200
+
+    # Update schedule via HTTP
+    res = client.patch(
+        f"/api/v1/maintenance-schedule/{entry_id}",
+        json={"status": "confirmed"},
+        headers=headers_a,
+    )
+    assert res.status_code == 200
+    assert res.json()["status"] == "confirmed"
+
+    # Trigger RUL ranking via HTTP
+    res = client.post("/api/v1/maintenance-schedule/rank", headers=headers_a)
+    assert res.status_code == 200
+
+    # 404 test
+    res = client.get("/api/v1/maintenance-schedule/00000000-0000-0000-0000-000000000000", headers=headers_a)
+    assert res.status_code == 404

@@ -7,7 +7,9 @@ autogenerate diffs against the exact same metadata the app runs on.
 from logging.config import fileConfig
 
 from alembic import context
-from sqlalchemy import engine_from_config, pool
+
+# FIX 1: Added `text` to the sqlalchemy imports
+from sqlalchemy import engine_from_config, pool, text
 
 # Import every module's models so they register on Base.metadata before
 # autogenerate runs. Add a line here whenever a new module gets models.py.
@@ -36,15 +38,27 @@ if config.config_file_name is not None:
 
 target_metadata = Base.metadata
 
-config.set_main_option("sqlalchemy.url", settings.database_url)
+# FIX: Escaping the '%' sign in the database password so Alembic doesn't crash
+safe_db_url = str(settings.database_url).replace("%", "%%")
+config.set_main_option("sqlalchemy.url", safe_db_url)
+
+
+def include_name(name, type_, parent_names):
+    if type_ == "schema":
+        # Only track migrations for these specific Medallion schemas
+        return name in ["master", "bronze", "silver", "gold"]
+    return True
 
 
 def run_migrations_offline() -> None:
     context.configure(
-        url=settings.database_url,
+        url=safe_db_url,
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        include_schemas=True,
+        include_name=include_name,
+        version_table_schema="master",
     )
     with context.begin_transaction():
         context.run_migrations()
@@ -58,7 +72,20 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
-        context.configure(connection=connection, target_metadata=target_metadata)
+        # FIX 2: Create schemas dynamically so the CI pipeline doesn't crash
+        connection.execute(text("CREATE SCHEMA IF NOT EXISTS master;"))
+        connection.execute(text("CREATE SCHEMA IF NOT EXISTS bronze;"))
+        connection.execute(text("CREATE SCHEMA IF NOT EXISTS silver;"))
+        connection.execute(text("CREATE SCHEMA IF NOT EXISTS gold;"))
+        connection.commit()
+
+        context.configure(
+            connection=connection, 
+            target_metadata=target_metadata,
+            include_schemas=True,
+            include_name=include_name,
+            version_table_schema="master"
+        )
         with context.begin_transaction():
             context.run_migrations()
 

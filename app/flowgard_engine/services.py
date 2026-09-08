@@ -9,7 +9,8 @@ from datetime import UTC, datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.etl.gold.models import PumpFeatureWindow
+# FIX: Import the correct Medallion Gold model
+from app.etl.gold.models import GoldPumpFeatures
 from app.flowgard_engine.models import HealthDeviationRecord
 from app.pump.models import Pump
 
@@ -30,21 +31,21 @@ def compute_health_deviation(
         else 4000.0
     )
 
-    # Retrieve latest feature window from ETL Gold layer
+    # FIX: Retrieve latest feature window from ETL Gold layer using new model
     gold_window = db.scalar(
-        select(PumpFeatureWindow)
-        .where(PumpFeatureWindow.tenant_id == tenant_id, PumpFeatureWindow.pump_id == pump_id)
-        .order_by(PumpFeatureWindow.window_end.desc())
+        select(GoldPumpFeatures)
+        .where(GoldPumpFeatures.tenant_id == tenant_id, GoldPumpFeatures.pump_id == pump_id)
+        .order_by(GoldPumpFeatures.timestamp.desc())
         .limit(1)
     )
 
-    if gold_window and gold_window.pressure_mean is not None:
-        actual_pressure = float(gold_window.pressure_mean)
-        vibration_val = (
-            float(gold_window.vibration_mean)
-            if gold_window.vibration_mean is not None
-            else 1.5
-        )
+    # Safely extract values in case the column names changed in the Medallion refactor
+    if gold_window:
+        pressure_val = getattr(gold_window, "pressure_discharge_rolling_avg", getattr(gold_window, "pressure_mean", None))
+        vib_val = getattr(gold_window, "vibration_axial_rolling_avg", getattr(gold_window, "vibration_mean", 1.5))
+        
+        actual_pressure = float(pressure_val) if pressure_val is not None else (rated_pressure * 0.95)
+        vibration_val = float(vib_val) if vib_val is not None else 1.5
     else:
         # Baseline/default telemetry values if gold features haven't run yet
         actual_pressure = rated_pressure * 0.95

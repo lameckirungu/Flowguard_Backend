@@ -6,6 +6,7 @@ per test session; each test gets a clean slate via a post-test truncate
 rather than transaction rollback, since service functions call `db.commit()`
 internally (a nested-SAVEPOINT scheme would fight that).
 """
+import math
 import uuid
 
 import pytest
@@ -56,11 +57,31 @@ except Exception:
     )
 
 
+class SqliteStdDev:
+    def __init__(self):
+        self.values = []
+
+    def step(self, value):
+        if value is not None:
+            self.values.append(float(value))
+
+    def finalize(self):
+        if len(self.values) <= 1:
+            return 0.0
+        mean = sum(self.values) / len(self.values)
+        variance = sum((x - mean) ** 2 for x in self.values) / (len(self.values) - 1)
+        return math.sqrt(variance)
+
+
 @event.listens_for(engine, "connect")
 def _set_sqlite_pragma(dbapi_connection, connection_record):
     if "sqlite" in str(engine.url):
+        dbapi_connection.create_aggregate("stddev", 1, SqliteStdDev)
+        dbapi_connection.create_aggregate("stddev_samp", 1, SqliteStdDev)
         cursor = dbapi_connection.cursor()
         cursor.execute("PRAGMA foreign_keys=ON")
+        for schema in ["master", "bronze", "silver", "gold"]:
+            cursor.execute(f"ATTACH DATABASE ':memory:' AS {schema}")
         cursor.close()
 
 
@@ -84,6 +105,20 @@ def db_session():
         with engine.begin() as conn:
             for table in reversed(Base.metadata.sorted_tables):
                 conn.execute(table.delete())
+
+
+@pytest.fixture(autouse=True)
+def sent_emails(monkeypatch) -> list[dict]:
+    """Capture onboarding emails instead of hitting SMTP. Autouse so no test
+    can accidentally make a real send; return value is the list of messages
+    (dicts with to/subject/body) for tests that want to assert on them."""
+    captured: list[dict] = []
+
+    def _capture(*, to: str, subject: str, body: str) -> None:
+        captured.append({"to": to, "subject": subject, "body": body})
+
+    monkeypatch.setattr("app.core.email.send_email", _capture)
+    return captured
 
 
 @pytest.fixture()
@@ -133,13 +168,34 @@ def station_b(db_session: Session, tenant_b: Tenant) -> Station:
     return station
 
 
-def make_user(db_session: Session, tenant: Tenant, role: UserRole = UserRole.ADMIN) -> User:
+def make_user(
+    db_session: Session,
+    tenant: Tenant,
+    role: UserRole = UserRole.ADMIN,
+    *,
+    must_reset_password: bool = False,
+) -> User:
     user = User(
         tenant_id=tenant.id,
         email=f"user-{uuid.uuid4().hex[:8]}@example.com",
         hashed_password=hash_password("password123"),
         full_name="Test User",
         role=role,
+        must_reset_password=must_reset_password,
+    )
+    db_session.add(user)
+    db_session.commit()
+    db_session.refresh(user)
+    return user
+
+
+def make_platform_admin(db_session: Session) -> User:
+    user = User(
+        tenant_id=None,
+        email=f"platform-{uuid.uuid4().hex[:8]}@flow.com",
+        hashed_password=hash_password("password123"),
+        full_name="Platform Admin",
+        role=UserRole.PLATFORM_ADMIN,
     )
     db_session.add(user)
     db_session.commit()
@@ -162,6 +218,16 @@ def user_a(db_session: Session, tenant_a: Tenant) -> User:
 @pytest.fixture()
 def user_b(db_session: Session, tenant_b: Tenant) -> User:
     return make_user(db_session, tenant_b)
+
+
+@pytest.fixture()
+def platform_admin(db_session: Session) -> User:
+    return make_platform_admin(db_session)
+
+
+@pytest.fixture()
+def platform_admin_headers(platform_admin: User) -> dict[str, str]:
+    return auth_headers(platform_admin)
 
 
 @pytest.fixture()
