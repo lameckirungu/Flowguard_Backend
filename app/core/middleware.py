@@ -24,7 +24,11 @@ def add_middleware(app: FastAPI) -> None:
         request_id = request.headers.get("x-request-id", str(uuid.uuid4()))
         start = time.perf_counter()
 
-        response = await call_next(request)
+        try:
+            response = await call_next(request)
+        except Exception:
+            logger.exception("Unhandled request failure [%s]", request_id)
+            response = Response(status_code=500, content="Internal server error")
 
         duration_ms = (time.perf_counter() - start) * 1000
         response.headers["x-request-id"] = request_id
