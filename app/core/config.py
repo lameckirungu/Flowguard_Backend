@@ -38,6 +38,7 @@ class Settings(BaseSettings):
     jwt_secret_key: str
     jwt_algorithm: str = "HS256"
     jwt_access_token_expire_minutes: int = 60
+    jwt_refresh_token_expire_days: int = 7
     # Short-lived token handed out at login when a user still has a
     # first-time password to change — accepted only by the reset-password
     # route, never by a normal protected endpoint.
