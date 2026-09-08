@@ -6,7 +6,7 @@ from app.core.auth import require_permission
 from app.core.db import get_db
 from app.core.permissions import Permission
 from app.core.tenancy import get_current_tenant_id
-from app.etl.gold.models import PumpFeatureWindow
+from app.etl.gold.models import GoldPumpFeatures
 from app.prediction.models import PredictionResult
 from app.telemetry.models import TelemetryRecord, TelemetryStatus
 
@@ -23,7 +23,7 @@ def summary(db: Session = Depends(get_db), tenant_id: uuid.UUID = Depends(get_cu
     )
     features = (
         db.scalar(
-            select(func.count(PumpFeatureWindow.id)).where(PumpFeatureWindow.tenant_id == tenant_id)
+            select(func.count(GoldPumpFeatures.id)).where(GoldPumpFeatures.tenant_id == tenant_id)
         )
         or 0
     )

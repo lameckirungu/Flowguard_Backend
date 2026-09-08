@@ -10,7 +10,8 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.core.auth import require_role
+from app.core.auth import CurrentUser, require_permission, require_role
+from app.core.permissions import Permission
 from app.core.db import get_db
 from app.core.email import EmailNotConfiguredError
 from app.tenant import services
@@ -54,8 +55,10 @@ def list_tenants(
 def get_tenant(
     tenant_id: uuid.UUID,
     db: Session = Depends(get_db),
-    _=Depends(require_platform_admin),
+    current: CurrentUser = Depends(require_permission(Permission.MANAGE_TENANT)),
 ) -> TenantRead:
+    if current.tenant_id != tenant_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
     tenant = services.get_tenant(db, tenant_id)
     if tenant is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tenant not found")
@@ -67,8 +70,10 @@ def update_tenant(
     tenant_id: uuid.UUID,
     payload: TenantUpdate,
     db: Session = Depends(get_db),
-    _=Depends(require_platform_admin),
+    current: CurrentUser = Depends(require_permission(Permission.MANAGE_TENANT)),
 ) -> TenantRead:
+    if current.tenant_id != tenant_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant access denied")
     tenant = services.update_tenant(db, tenant_id, payload)
     if tenant is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tenant not found")

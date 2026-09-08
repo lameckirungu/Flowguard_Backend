@@ -38,7 +38,7 @@ def _pump_health(db: Session, tenant_id: uuid.UUID, pump: Pump, station: Station
     attribution = _latest(
         db, FeatureAttribution, tenant_id, pump.id, FeatureAttribution.computed_at
     )
-    sensor = _latest(db, SensorReading, tenant_id, pump.id, SensorReading.recorded_at)
+    sensor = _latest(db, SensorReading, tenant_id, pump.id, SensorReading.timestamp)
 
     shap = []
     if attribution:
@@ -68,26 +68,24 @@ def _pump_health(db: Session, tenant_id: uuid.UUID, pump: Pump, station: Station
         predicted_class=prediction.predicted_class if prediction else None,
         health_deviation_index=float(hdi.health_deviation_index or 0) if hdi else 0,
         sensors=SensorSnapshot(
-            vibration_g=float(sensor.vibration_g)
-            if sensor and sensor.vibration_g is not None
-            else None,
+            vibration_g=None,
             vibration_mm_s=(
-                float(sensor.vibration_mm_s)
-                if sensor and sensor.vibration_mm_s is not None
+                float(sensor.vibration_radial_mm_s)
+                if sensor and sensor.vibration_radial_mm_s is not None
                 else None
             ),
             temperature_c=(
-                float(sensor.temperature_c) if sensor and sensor.temperature_c is not None else None
+                float(sensor.temperature_casing_c) if sensor and sensor.temperature_casing_c is not None else None
             ),
-            pressure_kpa=float(sensor.pressure_kpa)
-            if sensor and sensor.pressure_kpa is not None
+            pressure_kpa=float(sensor.pressure_discharge_psi) * 6.89476
+            if sensor and sensor.pressure_discharge_psi is not None
             else None,
             motor_current_a=(
-                float(sensor.motor_current_a)
-                if sensor and sensor.motor_current_a is not None
+                float(sensor.motor_current_amps)
+                if sensor and sensor.motor_current_amps is not None
                 else None
             ),
-            recorded_at=sensor.recorded_at if sensor else None,
+            recorded_at=sensor.timestamp if sensor else None,
         ),
         rul_days=float(rul.remaining_useful_life_days)
         if rul and rul.remaining_useful_life_days is not None
