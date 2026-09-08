@@ -1,42 +1,44 @@
 # Flowgard UAT Runbook
 
-## Start
+## Environment
 
-1. Copy `.env.example` to `.env` and set a unique `JWT_SECRET_KEY`.
-2. Start the existing stack with `docker compose up --build`.
-3. Run migrations through the existing `migrate` service.
-4. Seed the platform administrator and demo tenant with `docker compose --profile seed run --rm seed`.
-5. Start the Next.js frontend using its documented command and confirm its backend proxy points to port 8000.
+The hosted UAT consists of a Render FastAPI backend, Render PostgreSQL database, and Next.js frontend. All seeded analytics are synthetic and intended only for grading and workflow demonstration.
 
-## Readiness
+## Seeded accounts
 
-- `GET /health` confirms that the process is running.
-- `GET /ready` confirms that the API can reach PostgreSQL.
-- Authenticated `GET /api/v1/pipeline/status` reports telemetry, feature, and prediction freshness for the active tenant.
+- `admin@flowgard.com` — tenant administration and operational control
+- `planner@flowgard.com` — maintenance planning and scheduling
+- `technician@flowgard.com` — assigned maintenance execution
+- `viewer@flowgard.com` — read-only operations
 
-## Closed-loop acceptance
+Password for each: `Flowgard-UAT-2026!`
 
-1. Sign in as a seeded tenant administrator.
-2. Confirm stations, pumps, and tenant-scoped users are visible.
-3. Confirm Data Operations displays connector and pipeline status.
-4. Ingest or simulate telemetry and confirm the latest telemetry timestamp advances.
-5. Run the feature/prediction workflow and confirm model and input provenance are retained.
-6. Inspect an incident, acknowledge it, and assign ownership.
-7. Inspect the linked work order and assign it to a technician.
-8. Record a controlled maintenance outcome with a completion note.
-9. Verify the outcome and, if failed, create a follow-up work order.
-10. Open Maintenance Outcomes and export the report. Confirm that the CSV contains pump and station labels, not only UUIDs.
+## Acceptance checklist
 
-## Role checks
+1. Open the frontend login page and sign in as tenant admin.
+2. Confirm dashboard cards contain stations, pumps, risk, RUL, and model data.
+3. Open the network map and pump fleet; inspect a pump detail view.
+4. Review alerts and acknowledge one as an authorized role.
+5. Review work orders, assign/complete an eligible order, and confirm the close action.
+6. Review the maintenance schedule and planner actions.
+7. Review model performance and governance pages.
+8. Open Settings as admin and confirm tenant configuration loads.
+9. Open User management as admin and verify role listings.
+10. Log out, immediately sign in as another role, and confirm the sidebar/actions change without refreshing.
+11. Export work-order or maintenance-outcome CSV and confirm human-readable pump/station names.
 
-- Viewer: read-only operations; mutation and restricted export requests are rejected.
-- Technician: assigned maintenance execution and evidence capture only.
-- Planner: assignment, escalation policy, scheduling, and follow-up management.
-- Tenant administrator: tenant users and configuration.
-- Platform administrator: tenant lifecycle and platform health, without implicit tenant operational access.
+## Expected boundaries
 
-## Recovery
+- Viewer is read-only.
+- Technician sees execution-oriented actions and assigned work.
+- Planner sees planning, scheduling, and assignment actions.
+- Tenant admin sees tenant settings and user management.
+- Platform admin is for cross-tenant API onboarding and does not inherit tenant operational access.
+- SMTP email and live SCADA/model execution are not enabled by default.
 
-- Preserve the database volume before reset operations.
-- Use reset and seed scripts only against the designated UAT tenant.
-- Do not use demo credentials or default JWT secrets in a hosted environment.
+## Troubleshooting
+
+- `GET /ready` must return 200 before testing the frontend.
+- If the dashboard is empty, confirm the backend deployed the latest UAT feature branch and logs contain `Seeded UAT operational records`.
+- If login fails with an invalid response, inspect the backend service URL and Render logs.
+- If the first request is slow, wait for the free Render service to wake up and retry.
