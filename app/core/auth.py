@@ -16,6 +16,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 
 from app.core.config import settings
+from app.core.permissions import Permission, has_permission
 
 # tokenUrl points at the user module's login route — see app/user/routes.py.
 # This is metadata for OpenAPI docs only; auth.py does not import app.user.
@@ -168,4 +169,13 @@ def require_role(*allowed_roles: str):
             )
         return current_user
 
+    return _check
+
+
+def require_permission(permission: Permission):
+    """Dependency factory for tenant operations protected by a capability."""
+    def _check(current_user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
+        if current_user.role == "platform_admin" or not has_permission(current_user.role, permission):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not enough permissions")
+        return current_user
     return _check
