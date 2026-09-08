@@ -82,6 +82,14 @@ def create_app() -> FastAPI:
     def health_check() -> dict[str, str]:
         return {"status": "ok", "app": settings.app_name, "environment": settings.environment}
 
+    @app.get("/ready", tags=["health"])
+    def readiness_check() -> dict[str, str]:
+        from sqlalchemy import text
+        from app.core.db import SessionLocal
+        with SessionLocal() as db:
+            db.execute(text("SELECT 1"))
+        return {"status": "ready", "app": settings.app_name}
+
     return app
 
 

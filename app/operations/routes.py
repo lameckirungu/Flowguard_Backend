@@ -9,10 +9,15 @@ from app.core.db import get_db
 from app.core.permissions import Permission
 from app.core.tenancy import get_current_tenant_id
 from app.operations import actions, services
+from app.operations.pipeline import status as pipeline_status
 from app.operations.action_schemas import ActionResult, DigestRequest
 from app.operations.schemas import Capabilities, DashboardSummary, ModelSummary, PumpHealth
 
 router = APIRouter(prefix="/api/v1", tags=["operations"])
+
+@router.get("/pipeline/status")
+def get_pipeline_status(db: Session = Depends(get_db), tenant_id: uuid.UUID = Depends(get_current_tenant_id)):
+    return pipeline_status(db, tenant_id)
 
 
 @router.get("/capabilities", response_model=Capabilities)
