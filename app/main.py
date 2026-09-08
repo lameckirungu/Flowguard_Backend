@@ -9,6 +9,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.alert.routes import router as alert_router
 from app.assets_routes import router as assets_router
+from app.incidents.routes import router as incidents_router
+from app.reporting.routes import router as reporting_router
 from app.audit.routes import router as audit_router
 from app.auth_session.routes import router as auth_router
 from app.core.config import settings
@@ -46,6 +48,8 @@ ALL_ROUTERS = (
     explainability_router,
     alert_router,
     assets_router,
+    incidents_router,
+    reporting_router,
     maintenance_schedule_router,
     model_metrics_router,
     model_governance_router,

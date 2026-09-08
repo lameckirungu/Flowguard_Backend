@@ -7,16 +7,26 @@ belongs to a future `evaluate_thresholds`-style function — not implemented
 yet.
 """
 import uuid
+from datetime import UTC, datetime
 
+from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.alert.models import Alert, AlertStatus
 from app.alert.schemas import AlertCreate, AlertUpdate
 from app.audit.services import record_event
+from app.core.permissions import Permission, has_permission
+from app.user.models import User
+from app.pump.models import Pump
+from app.station.models import Station
 
 
 def create_alert(db: Session, tenant_id: uuid.UUID, payload: AlertCreate) -> Alert:
+    pump = db.scalar(select(Pump).where(Pump.id == payload.pump_id, Pump.tenant_id == tenant_id))
+    station = db.scalar(select(Station).where(Station.id == payload.station_id, Station.tenant_id == tenant_id))
+    if pump is None or station is None or pump.station_id != station.id:
+        raise HTTPException(422, "Pump and station must belong to this organisation and match")
     alert = Alert(tenant_id=tenant_id, **payload.model_dump())
     db.add(alert)
     db.commit()
@@ -49,10 +59,32 @@ def update_alert(
     payload: AlertUpdate,
     actor_user_id: uuid.UUID | None = None,
 ) -> Alert | None:
-    alert = get_alert(db, tenant_id, alert_id)
+    alert = db.scalar(select(Alert).where(
+        Alert.id == alert_id, Alert.tenant_id == tenant_id).with_for_update())
     if alert is None:
         return None
     changes = payload.model_dump(exclude_unset=True)
+    if "status" in changes and changes["status"] is None:
+        raise HTTPException(422, "Status is required")
+    if alert.status == AlertStatus.RESOLVED:
+        raise HTTPException(409, "Resolved incidents cannot be changed")
+    if changes.get("status") == AlertStatus.TRIGGERED and alert.status != AlertStatus.TRIGGERED:
+        raise HTTPException(409, "An acknowledged incident cannot return to triggered")
+    owner_id = changes.get("assigned_to_user_id")
+    if owner_id:
+        owner = db.scalar(select(User).where(User.id == owner_id,
+            User.tenant_id == tenant_id, User.is_active.is_(True)))
+        if owner is None or not has_permission(owner.role.value, Permission.MANAGE_ALERTS):
+            raise HTTPException(422, "Choose an active incident owner in this organisation")
+    target = changes.get("status", alert.status)
+    if target == AlertStatus.RESOLVED:
+        if not (changes.get("resolution_note") or "").strip():
+            raise HTTPException(422, "Explain the resolution before resolving the incident")
+        changes["resolved_at"] = datetime.now(UTC)
+    elif "resolution_note" in changes:
+        raise HTTPException(422, "Resolution notes require a resolved status")
+    if target == AlertStatus.ACKNOWLEDGED and alert.acknowledged_at is None:
+        changes["acknowledged_at"] = datetime.now(UTC)
     previous = {key: getattr(alert, key) for key in changes}
     for field, value in changes.items():
         setattr(alert, field, value)

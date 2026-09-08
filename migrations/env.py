@@ -13,6 +13,7 @@ from sqlalchemy import engine_from_config, pool
 # Import every module's models so they register on Base.metadata before
 # autogenerate runs. Add a line here whenever a new module gets models.py.
 import app.alert.models  # noqa: F401,E402
+import app.incidents.models  # noqa: F401,E402
 import app.audit.models  # noqa: F401,E402
 import app.auth_session.models  # noqa: F401,E402
 import app.etl.bronze.models  # noqa: F401,E402

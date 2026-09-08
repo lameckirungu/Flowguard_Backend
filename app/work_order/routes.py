@@ -10,8 +10,9 @@ from app.core.db import get_db
 from app.core.permissions import Permission
 from app.core.tenancy import get_current_tenant_id
 from app.work_order import services
+from app.work_order import outcomes
 from app.work_order.models import WorkOrderStatus
-from app.work_order.schemas import WorkOrderCreate, WorkOrderOutcome, WorkOrderRead, WorkOrderUpdate
+from app.work_order.schemas import WorkOrderCreate, WorkOrderOutcome, WorkOrderRead, WorkOrderUpdate, VerificationWrite
 
 router = APIRouter(prefix="/api/v1/work-orders", tags=["work_orders"])
 
@@ -67,13 +68,25 @@ def update_work_order(
 
 @router.post("/{work_order_id}/outcome", response_model=WorkOrderRead)
 def record_outcome(work_order_id: uuid.UUID, payload: WorkOrderOutcome, db: Session = Depends(get_db), tenant_id: uuid.UUID = Depends(get_current_tenant_id), current_user: CurrentUser = Depends(require_permission(Permission.MANAGE_WORK_ORDERS))) -> WorkOrderRead:
-    if payload.outcome not in {"confirmed_failure", "degraded", "no_fault_found", "preventive_only", "inconclusive"}:
-        raise HTTPException(status_code=422, detail="Unsupported maintenance outcome")
-    update = WorkOrderUpdate(status=WorkOrderStatus.COMPLETED, completed_by_user_id=current_user.id, completion_note=payload.completion_note, outcome=payload.outcome, post_maintenance_condition=payload.post_maintenance_condition, root_cause=payload.root_cause, corrective_action=payload.corrective_action, downtime_minutes=payload.downtime_minutes, follow_up_required=payload.follow_up_required, follow_up_due_at=payload.follow_up_due_at)
-    work_order = services.update_work_order(db, tenant_id, work_order_id, update, actor_user_id=current_user.id)
-    if work_order is None:
-        raise HTTPException(status_code=404, detail="Work order not found")
-    return work_order
+    return outcomes.record_outcome(db, current_user, work_order_id, payload)
+
+
+@router.post("/{work_order_id}/verification", response_model=WorkOrderRead)
+def verify(work_order_id: uuid.UUID, payload: VerificationWrite, db=Depends(get_db),
+           current=Depends(require_permission(Permission.MANAGE_WORK_ORDERS))):
+    return outcomes.verify(db, current, work_order_id, payload)
+
+
+@router.post("/{work_order_id}/follow-up", response_model=WorkOrderRead)
+def follow_up(work_order_id: uuid.UUID, db=Depends(get_db),
+              current=Depends(require_permission(Permission.MANAGE_WORK_ORDERS))):
+    return outcomes.follow_up(db, current, work_order_id)
+
+
+@router.get("/{work_order_id}/history")
+def history(work_order_id: uuid.UUID, db=Depends(get_db),
+            current=Depends(require_permission(Permission.VIEW_OPERATIONS))):
+    return outcomes.history(db, current.tenant_id, work_order_id)
 
 @router.post(
     "/auto-generate/pumps/{pump_id}",

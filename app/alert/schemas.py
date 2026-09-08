@@ -2,7 +2,7 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.alert.models import AlertSeverity, AlertStatus
 
@@ -17,9 +17,10 @@ class AlertCreate(BaseModel):
 
 
 class AlertUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     status: AlertStatus | None = None
-    acknowledged_at: datetime | None = None
-    resolved_at: datetime | None = None
+    assigned_to_user_id: uuid.UUID | None = None
+    resolution_note: str | None = Field(default=None, min_length=1, max_length=4000)
 
 
 class AlertRead(BaseModel):
@@ -36,3 +37,5 @@ class AlertRead(BaseModel):
     acknowledged_at: datetime | None = None
     resolved_at: datetime | None = None
     source: str | None = None
+    assigned_to_user_id: uuid.UUID | None = None
+    resolution_note: str | None = None

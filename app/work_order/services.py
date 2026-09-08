@@ -1,6 +1,7 @@
 """Business logic for work orders."""
 import uuid
 from datetime import UTC, datetime
+from fastapi import HTTPException
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -11,6 +12,8 @@ from app.prediction.services import get_latest_prediction, run_prediction
 from app.pump.models import Pump
 from app.work_order.models import WorkOrder, WorkOrderSource, WorkOrderStatus
 from app.work_order.schemas import WorkOrderCreate, WorkOrderUpdate
+from app.core.permissions import Permission, has_permission
+from app.user.models import User
 
 
 def create_work_order(
@@ -61,10 +64,23 @@ def update_work_order(
     payload: WorkOrderUpdate,
     actor_user_id: uuid.UUID | None = None,
 ) -> WorkOrder | None:
-    work_order = get_work_order(db, tenant_id, work_order_id)
+    work_order = db.scalar(select(WorkOrder).where(
+        WorkOrder.id == work_order_id, WorkOrder.tenant_id == tenant_id).with_for_update())
     if work_order is None:
         return None
     changes = payload.model_dump(exclude_unset=True)
+    if work_order.status in {WorkOrderStatus.COMPLETED, WorkOrderStatus.CANCELLED}:
+        raise HTTPException(409, "Use the outcome correction workflow for completed work")
+    if changes.get("status") == WorkOrderStatus.COMPLETED:
+        raise HTTPException(422, "Use the structured outcome form to complete this work order")
+    if "status" in changes and changes["status"] is None:
+        raise HTTPException(422, "Status cannot be empty")
+    owner_id = changes.get("assigned_to_user_id")
+    if owner_id:
+        owner = db.scalar(select(User).where(User.id == owner_id,
+            User.tenant_id == tenant_id, User.is_active.is_(True)))
+        if owner is None or not has_permission(owner.role.value, Permission.MANAGE_WORK_ORDERS):
+            raise HTTPException(422, "Choose an active maintenance user in this organisation")
     previous = {key: getattr(work_order, key) for key in changes}
     for field, value in changes.items():
         setattr(work_order, field, value)
