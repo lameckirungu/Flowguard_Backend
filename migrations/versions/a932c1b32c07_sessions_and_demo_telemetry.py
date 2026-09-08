@@ -16,7 +16,14 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    op.add_column("sensor_reading", sa.Column("vibration_g", sa.Numeric(10, 4), nullable=True))
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    if "sensor_reading" in inspector.get_table_names():
+        columns = {column["name"] for column in inspector.get_columns("sensor_reading")}
+        if "vibration_g" not in columns:
+            op.add_column("sensor_reading", sa.Column("vibration_g", sa.Numeric(10, 4), nullable=True))
+    if "refresh_session" in inspector.get_table_names():
+        return
     op.create_table(
         "refresh_session",
         sa.Column("user_id", sa.Uuid(), nullable=False),
@@ -50,8 +57,13 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    if "refresh_session" not in inspector.get_table_names():
+        return
     op.drop_index("ix_refresh_session_token_hash", table_name="refresh_session")
     op.drop_index("ix_refresh_session_user_id", table_name="refresh_session")
     op.drop_index("ix_refresh_session_tenant_id", table_name="refresh_session")
     op.drop_table("refresh_session")
-    op.drop_column("sensor_reading", "vibration_g")
+    if "sensor_reading" in inspector.get_table_names() and "vibration_g" in {column["name"] for column in inspector.get_columns("sensor_reading")}: 
+        op.drop_column("sensor_reading", "vibration_g")
