@@ -9,7 +9,7 @@ app depends on.
 from functools import lru_cache
 from typing import Annotated
 
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
@@ -75,6 +75,17 @@ class Settings(BaseSettings):
         if isinstance(value, str):
             return [origin.strip() for origin in value.split(",") if origin.strip()]
         return value
+
+    @model_validator(mode="after")
+    def validate_production_security(self):
+        if self.environment.lower() in {"production", "staging"}:
+            if len(self.jwt_secret_key) < 32 or self.jwt_secret_key in {"dev-secret-change-me", "change-me"}:
+                raise ValueError("JWT_SECRET_KEY must be a unique value of at least 32 characters outside development")
+            if any("localhost" in origin or "127.0.0.1" in origin for origin in self.cors_allow_origins):
+                raise ValueError("CORS_ALLOW_ORIGINS cannot contain local development origins outside development")
+            if self.debug:
+                raise ValueError("DEBUG must be disabled outside development")
+        return self
 
 
 @lru_cache
