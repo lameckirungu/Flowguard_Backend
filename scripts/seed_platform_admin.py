@@ -24,6 +24,7 @@ from app.core.auth import hash_password  # noqa: E402
 from app.core.config import settings  # noqa: E402
 from app.core.db import SessionLocal  # noqa: E402
 from app.user.models import User, UserRole  # noqa: E402
+from app.tenant.models import Tenant  # noqa: E402,F401
 
 
 def seed(db: Session) -> User:
