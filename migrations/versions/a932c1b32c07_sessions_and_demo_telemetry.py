@@ -18,11 +18,11 @@ depends_on: str | Sequence[str] | None = None
 def upgrade() -> None:
     bind = op.get_bind()
     inspector = sa.inspect(bind)
-    if "sensor_reading" in inspector.get_table_names():
-        columns = {column["name"] for column in inspector.get_columns("sensor_reading")}
+    if "sensor_reading" in inspector.get_table_names(schema="master"):
+        columns = {column["name"] for column in inspector.get_columns("sensor_reading", schema="master")}
         if "vibration_g" not in columns:
             op.add_column("sensor_reading", sa.Column("vibration_g", sa.Numeric(10, 4), nullable=True))
-    if "refresh_session" in inspector.get_table_names():
+    if "refresh_session" in inspector.get_table_names(schema="master"):
         return
     op.create_table(
         "refresh_session",
@@ -50,20 +50,21 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["tenant_id"], ["tenant.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["user_id"], ["user.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
+        schema="master",
     )
-    op.create_index("ix_refresh_session_tenant_id", "refresh_session", ["tenant_id"])
-    op.create_index("ix_refresh_session_user_id", "refresh_session", ["user_id"])
-    op.create_index("ix_refresh_session_token_hash", "refresh_session", ["token_hash"], unique=True)
+    op.create_index("ix_refresh_session_tenant_id", "refresh_session", ["tenant_id"], schema="master")
+    op.create_index("ix_refresh_session_user_id", "refresh_session", ["user_id"], schema="master")
+    op.create_index("ix_refresh_session_token_hash", "refresh_session", ["token_hash"], unique=True, schema="master")
 
 
 def downgrade() -> None:
     bind = op.get_bind()
     inspector = sa.inspect(bind)
-    if "refresh_session" not in inspector.get_table_names():
+    if "refresh_session" not in inspector.get_table_names(schema="master"):
         return
-    op.drop_index("ix_refresh_session_token_hash", table_name="refresh_session")
-    op.drop_index("ix_refresh_session_user_id", table_name="refresh_session")
-    op.drop_index("ix_refresh_session_tenant_id", table_name="refresh_session")
-    op.drop_table("refresh_session")
-    if "sensor_reading" in inspector.get_table_names() and "vibration_g" in {column["name"] for column in inspector.get_columns("sensor_reading")}: 
+    op.drop_index("ix_refresh_session_token_hash", table_name="refresh_session", schema="master")
+    op.drop_index("ix_refresh_session_user_id", table_name="refresh_session", schema="master")
+    op.drop_index("ix_refresh_session_tenant_id", table_name="refresh_session", schema="master")
+    op.drop_table("refresh_session", schema="master")
+    if "sensor_reading" in inspector.get_table_names(schema="master") and "vibration_g" in {column["name"] for column in inspector.get_columns("sensor_reading", schema="master")}: 
         op.drop_column("sensor_reading", "vibration_g")
