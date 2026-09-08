@@ -46,9 +46,9 @@ def upgrade() -> None:
             server_default=sa.text("now()"),
             nullable=False,
         ),
-        sa.ForeignKeyConstraint(["replaced_by_id"], ["refresh_session.id"], ondelete="SET NULL"),
-        sa.ForeignKeyConstraint(["tenant_id"], ["tenant.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(["user_id"], ["user.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["replaced_by_id"], ["master.refresh_session.id"], ondelete="SET NULL"),
+        sa.ForeignKeyConstraint(["tenant_id"], ["master.tenant.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["user_id"], ["master.user.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
         schema="master",
     )
